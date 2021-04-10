@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 
+from sklearn.preprocessing import minmax_scale
 from torch.utils.data import Dataset, DataLoader
 from pycocotools.coco import COCO
 import cv2
@@ -54,13 +55,24 @@ class CocoDataset(Dataset):
     def load_image(self, image_index):
         image_info = self.coco.loadImgs(self.image_ids[image_index])[0]
         path = os.path.join(self.root_dir, self.img_dir, self.set_name, image_info['file_name'])
-        img = cv2.imread(path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # if len(img.shape) == 2:
-        #     img = skimage.color.gray2rgb(img)
+        with np.load(path) as data:
+            if len(data) != 1 or "arr_0" not in data:
+                raise Exception("More than 1 array in the npz or name invalid")
+            arr = data['arr_0'].astype(np.float32)
 
-        return img.astype(np.float32) / 255.
+        if arr.shape[0] != arr.shape[1]:
+            print("ERROR", path)
+               
+        data = minmax_scale(np.clip(arr, 0, 99999), feature_range=(0, 1))
+        return np.repeat(data[:, :, np.newaxis], 3, axis=2)
+        # img = cv2.imread(path)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        # # if len(img.shape) == 2:
+        # #     img = skimage.color.gray2rgb(img)
+
+        # return img.astype(np.float32) / 255.
 
     def load_annotations(self, image_index):
         # get ground truth annotations
