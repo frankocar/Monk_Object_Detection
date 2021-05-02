@@ -13,6 +13,8 @@ from tqdm.autonotebook import tqdm
 from src.config import colors
 import cv2
 
+from sklearn.preprocessing import minmax_scale
+
 
 class Infer():
     '''
@@ -24,12 +26,14 @@ class Infer():
                         1 - Print desired details
     '''
     def __init__(self, verbose=1):
-        self.system_dict = {};
-        self.system_dict["verbose"] = verbose;
-        self.system_dict["local"] = {};
-        self.system_dict["local"]["common_size"] = 512;
-        self.system_dict["local"]["mean"] = np.array([[[0.485, 0.456, 0.406]]])
-        self.system_dict["local"]["std"] = np.array([[[0.229, 0.224, 0.225]]])
+        self.system_dict = {}
+        self.system_dict["verbose"] = verbose
+        self.system_dict["local"] = {}
+        self.system_dict["local"]["common_size"] = 1024
+        self.system_dict["local"]["mean"] = np.array([[[0.5, 0.5, 0.5]]])
+        self.system_dict["local"]["std"] = np.array([[[0.3, 0.3, 0.3]]])
+        # self.system_dict["local"]["mean"] = np.array([[[0.485, 0.456, 0.406]]])
+        # self.system_dict["local"]["std"] = np.array([[[0.229, 0.224, 0.225]]])
 
     def Model(self, model_dir="trained/"):
         '''
@@ -41,105 +45,94 @@ class Infer():
         Returns:
             None
         '''
-        self.system_dict["local"]["model"] = torch.load(model_dir + "/signatrix_efficientdet_coco.pth").module
+        self.system_dict["local"]["model"] = torch.load(model_dir + "/signatrix_efficientdet_coco.pth", map_location=torch.device('cpu')).module
         if torch.cuda.is_available():
             self.system_dict["local"]["model"] = self.system_dict["local"]["model"].cuda();
 
-    def Predict(self, img_path, class_list, vis_threshold = 0.4, output_folder = 'Inference'):
+    def Predict(self, img_path):
         '''
         User function: Run inference on image and visualize it
 
         Args:
             img_path (str): Relative path to the image file
-            class_list (list): List of classes in the training set
-            vis_threshold (float): Threshold for predicted scores. Scores for objects detected below this score will not be displayed 
-            output_folder (str): Path to folder where output images will be saved
 
         Returns:
             tuple: Contaning label IDs, Scores and bounding box locations of predicted objects. 
         '''
 
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
-        
-        image_filename = os.path.basename(img_path)
-        img = cv2.imread(img_path);
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB);
-        image = img.astype(np.float32) / 255.;
+        with np.load(img_path) as data:
+            if len(data) != 1 or "arr_0" not in data:
+                raise Exception("More than 1 array in the npz or name invalid")
+            arr = data['arr_0'].astype(np.float32)
+
+        if arr.shape[0] != arr.shape[1]:
+            print("ERROR", img_path)
+               
+        data = minmax_scale(np.clip(arr, 0, 99999), feature_range=(0, 1))
+        image = np.repeat(data[:, :, np.newaxis], 3, axis=2)
+
         image = (image.astype(np.float32) - self.system_dict["local"]["mean"]) / self.system_dict["local"]["std"]
         height, width, _ = image.shape
-        if height > width:
-            scale = self.system_dict["local"]["common_size"] / height
-            resized_height = self.system_dict["local"]["common_size"]
-            resized_width = int(width * scale)
+
+        if height != self.system_dict["local"]["common_size"]:
+            if height > width:
+                scale = self.system_dict["local"]["common_size"] / height
+                resized_height = self.system_dict["local"]["common_size"]
+                resized_width = int(width * scale)
+            else:
+                scale = self.system_dict["local"]["common_size"] / width
+                resized_height = int(height * scale)
+                resized_width = self.system_dict["local"]["common_size"]
+
+            image = cv2.resize(image, (resized_width, resized_height))
+
+            new_image = np.zeros((self.system_dict["local"]["common_size"], self.system_dict["local"]["common_size"], 3))
+            new_image[0:resized_height, 0:resized_width] = image
         else:
-            scale = self.system_dict["local"]["common_size"] / width
-            resized_height = int(height * scale)
-            resized_width = self.system_dict["local"]["common_size"]
-
-        image = cv2.resize(image, (resized_width, resized_height))
-
-        new_image = np.zeros((self.system_dict["local"]["common_size"], self.system_dict["local"]["common_size"], 3))
-        new_image[0:resized_height, 0:resized_width] = image
+            new_image = np.zeros((self.system_dict["local"]["common_size"], self.system_dict["local"]["common_size"], 3))
+            new_image[0:self.system_dict["local"]["common_size"], 0:self.system_dict["local"]["common_size"]] = image
 
         img = torch.from_numpy(new_image)
 
         with torch.no_grad():
-            scores, labels, boxes = self.system_dict["local"]["model"](img.cuda().permute(2, 0, 1).float().unsqueeze(dim=0))
-            boxes /= scale;
+            scores, labels, boxes = self.system_dict["local"]["model"](img.permute(2, 0, 1).float().unsqueeze(dim=0))
+            if height != self.system_dict["local"]["common_size"]:
+                boxes /= scale;
 
+        return scores, labels, boxes
 
-        try:
-            if boxes.shape[0] > 0:
-                output_image = cv2.imread(img_path)
+    def Predict_direct(self, img_data):
+        if img_data.shape[0] != img_data.shape[1]:
+            print("ERROR")
+               
+        data = minmax_scale(np.clip(img_data, 0, 99999), feature_range=(0, 1))
+        image = np.repeat(data[:, :, np.newaxis], 3, axis=2)
 
-                for box_id in range(boxes.shape[0]):
-                    pred_prob = float(scores[box_id])
-                    if pred_prob < vis_threshold:
-                        break
-                    pred_label = int(labels[box_id])
-                    xmin, ymin, xmax, ymax = boxes[box_id, :]
-                    color = colors[pred_label]
-                    cv2.rectangle(output_image, (xmin, ymin), (xmax, ymax), color, 2)
-                    text_size = cv2.getTextSize(class_list[pred_label] + ' : %.2f' % pred_prob, cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
+        image = (image.astype(np.float32) - self.system_dict["local"]["mean"]) / self.system_dict["local"]["std"]
+        height, width, _ = image.shape
 
-                    cv2.rectangle(output_image, (xmin, ymin), (xmin + text_size[0] + 3, ymin + text_size[1] + 4), color, -1)
-                    cv2.putText(
-                        output_image, class_list[pred_label] + ' : %.2f' % pred_prob,
-                        (xmin, ymin + text_size[1] + 4), cv2.FONT_HERSHEY_PLAIN, 1,
-                        (255, 255, 255), 1)
+        if height != self.system_dict["local"]["common_size"]:
+            if height > width:
+                scale = self.system_dict["local"]["common_size"] / height
+                resized_height = self.system_dict["local"]["common_size"]
+                resized_width = int(width * scale)
+            else:
+                scale = self.system_dict["local"]["common_size"] / width
+                resized_height = int(height * scale)
+                resized_width = self.system_dict["local"]["common_size"]
 
-            cv2.imwrite(os.path.join(output_folder, image_filename), output_image)
-            cv2.imwrite("output.jpg", output_image)
-            return scores, labels, boxes
-        
-        except:
-            print("NO Object Detected")
-            return None
+            image = cv2.resize(image, (resized_width, resized_height))
 
-    def predict_batch_of_images(self, img_folder, class_list, vis_threshold = 0.4, output_folder='Inference'):
-        '''
-        User function: Run inference on multiple images and visualize them
+            new_image = np.zeros((self.system_dict["local"]["common_size"], self.system_dict["local"]["common_size"], 3))
+            new_image[0:resized_height, 0:resized_width] = image
+        else:
+            new_image = np.zeros((self.system_dict["local"]["common_size"], self.system_dict["local"]["common_size"], 3))
+            new_image[0:self.system_dict["local"]["common_size"], 0:self.system_dict["local"]["common_size"]] = image
 
-        Args:
-            img_folder (str): Relative path to folder containing all the image files
-            class_list (list): List of classes in the training set
-            vis_threshold (float): Threshold for predicted scores. Scores for objects detected below this score will not be displayed 
-            output_folder (str): Path to folder where output images will be saved
+        img = torch.from_numpy(new_image)
 
-        Returns:
-            None 
-        '''
-        all_filenames = os.listdir(img_folder)
-        all_filenames.sort()
-        generated_count = 0
-        for filename in all_filenames:
-            img_path = "{}/{}".format(img_folder, filename)
-            try:
-                self.Predict(img_path , class_list, vis_threshold ,output_folder)
-                generated_count += 1
-            except:
-                continue
-        print("Objects detected  for {} images".format(generated_count))
+        with torch.no_grad():
+            scores, labels, boxes = self.system_dict["local"]["model"](img.permute(2, 0, 1).float().unsqueeze(dim=0))
 
+        return scores, labels, boxes
         

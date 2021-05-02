@@ -66,13 +66,7 @@ class CocoDataset(Dataset):
                
         data = minmax_scale(np.clip(arr, 0, 99999), feature_range=(0, 1))
         return np.repeat(data[:, :, np.newaxis], 3, axis=2)
-        # img = cv2.imread(path)
-        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # # if len(img.shape) == 2:
-        # #     img = skimage.color.gray2rgb(img)
-
-        # return img.astype(np.float32) / 255.
 
     def load_annotations(self, image_index):
         # get ground truth annotations
@@ -192,8 +186,8 @@ class Augmenter(object):
 class Normalizer(object):
 
     def __init__(self):
-        self.mean = np.array([[[0.485, 0.456, 0.406]]])
-        self.std = np.array([[[0.229, 0.224, 0.225]]])
+        self.mean = np.array([[[0.5, 0.5, 0.5]]])
+        self.std = np.array([[[0.3, 0.3, 0.3]]])
 
     def __call__(self, sample):
         image, annots = sample['img'], sample['annot']
