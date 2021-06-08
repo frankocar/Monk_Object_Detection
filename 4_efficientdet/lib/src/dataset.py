@@ -56,16 +56,25 @@ class CocoDataset(Dataset):
         image_info = self.coco.loadImgs(self.image_ids[image_index])[0]
         path = os.path.join(self.root_dir, self.img_dir, self.set_name, image_info['file_name'])
 
-        with np.load(path) as data:
-            if len(data) != 1 or "arr_0" not in data:
-                raise Exception("More than 1 array in the npz or name invalid")
-            arr = data['arr_0'].astype(np.float32)
+        if path.endswith('npz'):
+            with np.load(path) as data:
+                if len(data) != 1 or "arr_0" not in data:
+                    raise Exception("More than 1 array in the npz or name invalid")
+                arr = data['arr_0'].astype(np.float32)
 
-        if arr.shape[0] != arr.shape[1]:
-            print("ERROR", path)
-               
-        data = minmax_scale(np.clip(arr, 0, 99999), feature_range=(0, 1))
-        return np.repeat(data[:, :, np.newaxis], 3, axis=2)
+            if arr.shape[0] != arr.shape[1]:
+                print("ERROR", path)
+                
+            data = minmax_scale(np.clip(arr, 0, 99999), feature_range=(0, 1))
+            return np.repeat(data[:, :, np.newaxis], 3, axis=2)
+            
+        img = cv2.imread(path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        # if len(img.shape) == 2:
+        #     img = skimage.color.gray2rgb(img)
+
+        return img.astype(np.float32) / 255.
 
 
     def load_annotations(self, image_index):

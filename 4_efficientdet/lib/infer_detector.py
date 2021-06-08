@@ -95,7 +95,7 @@ class Infer():
         img = torch.from_numpy(new_image)
 
         with torch.no_grad():
-            scores, labels, boxes = self.system_dict["local"]["model"](img.permute(2, 0, 1).float().unsqueeze(dim=0))
+            scores, labels, boxes = self.system_dict["local"]["model"](img.cuda().permute(2, 0, 1).float().unsqueeze(dim=0))
             if height != self.system_dict["local"]["common_size"]:
                 boxes /= scale;
 
@@ -132,7 +132,9 @@ class Infer():
         img = torch.from_numpy(new_image)
 
         with torch.no_grad():
-            scores, labels, boxes = self.system_dict["local"]["model"](img.permute(2, 0, 1).float().unsqueeze(dim=0))
+            scores, labels, boxes = self.system_dict["local"]["model"](img.cuda().permute(2, 0, 1).float().unsqueeze(dim=0))
+            if height != self.system_dict["local"]["common_size"]:
+                boxes /= scale
 
         return scores, labels, boxes
         
