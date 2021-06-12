@@ -31,7 +31,7 @@ class Detector():
         self.system_dict["dataset"]["val"]["status"] = False;
 
         self.system_dict["params"] = {};
-        self.system_dict["params"]["image_size"] = 512;
+        self.system_dict["params"]["image_size"] = 1024;
         self.system_dict["params"]["batch_size"] = 8;
         self.system_dict["params"]["num_workers"] = 3;
         self.system_dict["params"]["use_gpu"] = True;
@@ -51,7 +51,7 @@ class Detector():
 
 
 
-    def Train_Dataset(self, root_dir, coco_dir, img_dir, set_dir, batch_size=8, image_size=512, use_gpu=True, num_workers=3):
+    def Train_Dataset(self, root_dir, coco_dir, img_dir, set_dir, batch_size=8, image_size=1024, use_gpu=True, num_workers=3):
         '''
         User function: Set training dataset parameters
 
@@ -384,7 +384,7 @@ class Detector():
                         torch.save(self.system_dict["local"]["model"], 
                             os.path.join(self.system_dict["output"]["saved_path"], "signatrix_efficientdet_coco.pth"))
 
-                        dummy_input = torch.rand(1, 3, 512, 512)
+                        dummy_input = torch.rand(1, 3, 1024, 1024)
                         if torch.cuda.is_available():
                             dummy_input = dummy_input.cuda()
                         if isinstance(self.system_dict["local"]["model"], nn.DataParallel):
@@ -441,7 +441,7 @@ class Detector():
                 torch.save(self.system_dict["local"]["model"], 
                     os.path.join(self.system_dict["output"]["saved_path"], "signatrix_efficientdet_coco.pth"))
 
-                dummy_input = torch.rand(1, 3, 512, 512)
+                dummy_input = torch.rand(1, 3, 1024, 1024)
                 if torch.cuda.is_available():
                     dummy_input = dummy_input.to(self.system_dict["local"]["device"])
                 if isinstance(self.system_dict["local"]["model"], nn.DataParallel):

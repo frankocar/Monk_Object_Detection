@@ -65,8 +65,7 @@ class CocoDataset(Dataset):
             if arr.shape[0] != arr.shape[1]:
                 print("ERROR", path)
                 
-            data = minmax_scale(np.clip(arr, 0, 99999), feature_range=(0, 1))
-            return np.repeat(data[:, :, np.newaxis], 3, axis=2)
+            return np.repeat(arr[:, :, np.newaxis], 3, axis=2) / 255.
             
         img = cv2.imread(path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -143,10 +142,10 @@ def collater(data):
 class Resizer(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __init__(self, common_size=512):
+    def __init__(self, common_size=1024):
         self.common_size = common_size;
 
-    def __call__(self, sample, common_size=512):
+    def __call__(self, sample, common_size=1024):
         common_size = self.common_size;
         image, annots = sample['img'], sample['annot']
         height, width, _ = image.shape
